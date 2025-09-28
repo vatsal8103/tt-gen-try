@@ -1,0 +1,426 @@
+import React, { useState, useEffect } from 'react'
+import { BarChart3, Users, BookOpen, Calendar, Upload, Settings, AlertCircle } from 'lucide-react'
+import { toast } from 'react-hot-toast'
+import api from '../services/api'
+import CSVUploader from '../components/upload/CSVUploader'
+import TimetableView from '../components/timetable/TimetableView'
+
+const AdminDashboard = () => {
+  const [loading, setLoading] = useState(true)
+  const [generating, setGenerating] = useState(false)
+  const [activeTab, setActiveTab] = useState('overview')
+  const [timetable, setTimetable] = useState([])
+  const [generatedTimetable, setGeneratedTimetable] = useState(null)
+  const [conflicts, setConflicts] = useState([])
+  const [analytics, setAnalytics] = useState({
+    students: 0,
+    faculty: 0,
+    courses: 0,
+    rooms: 0
+  })
+
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      const [analyticsRes, conflictsRes] = await Promise.all([
+        api.get('/analytics/overview'),
+        api.get('/timetable/conflicts')
+      ])
+      
+      setAnalytics(analyticsRes.data)
+      setConflicts(conflictsRes.data)
+    } catch (error) {
+      console.error('Failed to fetch data:', error)
+      setAnalytics({
+        students: 600,
+        faculty: 45,
+        courses: 120,
+        rooms: 35
+      })
+      setConflicts([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGenerateTimetable = async () => {
+    setGenerating(true)
+    try {
+      const response = await api.post("/timetable/generate", { 
+        semester: "Fall", 
+        year: 2025, 
+        name: "Main Schedule" 
+      })
+      console.log("🎯 Generated timetable data:", response.data)
+      setGeneratedTimetable(response.data)
+      toast.success("Timetable generated successfully!")
+      fetchData()
+    } catch (error) {
+      toast.error("Failed to generate timetable")
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const handleUploadSuccess = (type, data) => {
+    toast.success(`${type} data uploaded successfully!`)
+    fetchData()
+  }
+
+  const handleResolveConflict = async (conflictId, resolution) => {
+    try {
+      await api.post(`/timetable/conflicts/${conflictId}/resolve`, resolution)
+      toast.success('Conflict resolved!')
+      fetchData()
+    } catch (error) {
+      toast.error('Failed to resolve conflict')
+    }
+  }
+
+  const tabs = [
+    { id: 'overview', name: 'Overview', icon: BarChart3 },
+    { id: 'upload', name: 'Data Upload', icon: Upload },
+    { id: 'timetable', name: 'Master Timetable', icon: Calendar },
+    { id: 'conflicts', name: 'Conflicts', icon: AlertCircle }
+  ]
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  return (
+    <main className="flex-1 p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+          <p className="text-gray-600">Manage schedules, conflicts, and system data</p>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="border-b border-gray-200 mb-6">
+          <nav className="-mb-px flex space-x-8">
+            {tabs.map((tab) => {
+              const Icon = tab.icon
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <Icon className="h-4 w-4 mr-2 inline" />
+                  {tab.name}
+                  {tab.id === 'conflicts' && conflicts.length > 0 && (
+                    <span className="ml-2 bg-red-100 text-red-600 py-1 px-2 rounded-full text-xs">
+                      {conflicts.length}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </nav>
+        </div>
+
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            {/* Analytics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="card">
+                <div className="flex items-center">
+                  <Users className="h-8 w-8 text-blue-600" />
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Total Students</p>
+                    <p className="text-2xl font-bold text-gray-900">{analytics.students}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="card">
+                <div className="flex items-center">
+                  <Users className="h-8 w-8 text-green-600" />
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Faculty</p>
+                    <p className="text-2xl font-bold text-gray-900">{analytics.faculty}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="card">
+                <div className="flex items-center">
+                  <BookOpen className="h-8 w-8 text-purple-600" />
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Courses</p>
+                    <p className="text-2xl font-bold text-gray-900">{analytics.courses}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="card">
+                <div className="flex items-center">
+                  <Calendar className="h-8 w-8 text-orange-600" />
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Rooms</p>
+                    <p className="text-2xl font-bold text-gray-900">{analytics.rooms}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="card">
+              <h3 className="text-lg font-medium mb-4">Quick Actions</h3>
+              <div className="flex flex-wrap gap-4">
+                <button
+                  onClick={handleGenerateTimetable}
+                  disabled={generating}
+                  className="btn-primary"
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  {generating ? 'Generating...' : 'Generate Timetable'}
+                </button>
+                <button
+                  onClick={() => setActiveTab('upload')}
+                  className="btn-secondary"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Data
+                </button>
+                <button
+                  onClick={() => setActiveTab('conflicts')}
+                  className="btn-secondary"
+                >
+                  <AlertCircle className="h-4 w-4 mr-2" />
+                  View Conflicts ({conflicts.length})
+                </button>
+              </div>
+            </div>
+
+            {/* Generated Timetable Display */}
+            {generatedTimetable && (
+              <div className="card">
+                <h3 className="text-lg font-medium mb-4">Generated Weekly Timetable</h3>
+                <div className="text-sm text-gray-600 mb-4">
+                  Generated: {new Date(generatedTimetable.generatedAt).toLocaleString()}
+                </div>
+                
+                {/* Statistics */}
+                {generatedTimetable.stats && (
+                  <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+                    <h4 className="font-medium mb-2">Weekly Schedule Overview</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <span>🏫 Total Classrooms: {generatedTimetable.stats.roomsUsed}</span>
+                      <span>📅 Days per Week: 6</span>
+                      <span>🕐 Lectures per Day: 7</span>
+                      <span>👥 Total Students: {generatedTimetable.stats.totalStudents}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Schedule Display */}
+                <div className="grid gap-3 max-h-96 overflow-y-auto">
+                  {generatedTimetable.schedule?.slice(0, 20).map((slot) => (
+                    <div key={slot.id} className="border rounded-lg p-3">
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="font-medium text-blue-600">{slot.course}</h4>
+                        <span className="text-sm text-gray-500">{slot.day} {slot.timeSlot}</span>
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        <p>Faculty: {slot.faculty}</p>
+                        <p>Room: {slot.room}</p>
+                        <p>Students: {slot.students}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {generatedTimetable.schedule?.length > 20 && (
+                  <div className="mt-4 text-center text-sm text-gray-500">
+                    Showing first 20 of {generatedTimetable.schedule.length} total time slots
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Data Upload Tab */}
+        {activeTab === 'upload' && (
+          <div className="space-y-6">
+            <div className="card">
+              <h3 className="text-lg font-medium mb-6">Upload CSV Data</h3>
+              <CSVUploader onUploadSuccess={handleUploadSuccess} />
+            </div>
+          </div>
+        )}
+
+        {/* Master Timetable Tab */}
+        {activeTab === 'timetable' && (
+          <div className="space-y-6">
+            <div className="card">
+              <h3 className="text-lg font-medium mb-6">Master Timetable - All Classes</h3>
+              
+              {/* Generate button if no timetable exists */}
+              {!generatedTimetable && (
+                <div className="text-center py-8">
+                  <p className="text-gray-500 mb-4">No timetable generated yet</p>
+                  <button
+                    onClick={handleGenerateTimetable}
+                    disabled={generating}
+                    className="btn-primary"
+                  >
+                    {generating ? "Generating..." : "Generate Master Timetable"}
+                  </button>
+                </div>
+              )}
+              
+              {/* Display generated timetable */}
+              {generatedTimetable && (
+                <div className="space-y-8">
+                  {/* Class Selection Tabs */}
+                  <div className="border-b border-gray-200">
+                    <nav className="flex space-x-8 overflow-x-auto">
+                      {["All Classes", ...Array.from(new Set(generatedTimetable.schedule?.map(slot => slot.room) || []))].map((classroom) => (
+                        <button
+                          key={classroom}
+                          className="py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap border-blue-500 text-blue-600"
+                        >
+                          {classroom}
+                        </button>
+                      ))}
+                    </nav>
+                  </div>
+                  
+                  {/* Weekly Timetable Grid */}
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse border border-gray-300">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="border border-gray-300 px-4 py-2 text-left font-medium">Time Slot</th>
+                          <th className="border border-gray-300 px-4 py-2 text-center font-medium">Monday</th>
+                          <th className="border border-gray-300 px-4 py-2 text-center font-medium">Tuesday</th>
+                          <th className="border border-gray-300 px-4 py-2 text-center font-medium">Wednesday</th>
+                          <th className="border border-gray-300 px-4 py-2 text-center font-medium">Thursday</th>
+                          <th className="border border-gray-300 px-4 py-2 text-center font-medium">Friday</th>
+                          <th className="border border-gray-300 px-4 py-2 text-center font-medium">Saturday</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {["09:00-09:50", "10:00-10:50", "11:00-11:50", "12:00-12:50", "14:00-14:50", "15:00-15:50", "16:00-16:50"].map(timeSlot => (
+                          <tr key={timeSlot}>
+                            <td className="border border-gray-300 px-4 py-2 font-medium bg-gray-50">
+                              {timeSlot}
+                            </td>
+                            {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map(day => {
+                              const daySlots = generatedTimetable.schedule?.filter(slot => 
+                                slot.day === day && slot.timeSlot === timeSlot
+                              ) || [];
+                              return (
+                                <td key={day} className="border border-gray-300 px-2 py-2">
+                                  {daySlots.length > 0 ? (
+                                    <div className="space-y-1">
+                                      {daySlots.slice(0, 3).map((slot, index) => (
+                                        <div key={index} className="text-xs bg-blue-50 rounded p-1">
+                                          <div className="font-medium text-blue-700">{slot.course}</div>
+                                          <div className="text-gray-600">{slot.room}</div>
+                                          <div className="text-gray-500">{slot.faculty}</div>
+                                        </div>
+                                      ))}
+                                      {daySlots.length > 3 && (
+                                        <div className="text-xs text-gray-400 text-center">
+                                          +{daySlots.length - 3} more
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="text-center text-gray-300 text-xs">Free</div>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  {/* Statistics */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                    <div className="bg-blue-50 p-4 rounded-lg text-center">
+                      <div className="text-2xl font-bold text-blue-600">{generatedTimetable.stats?.totalClassrooms || 0}</div>
+                      <div className="text-sm text-gray-600">Total Classrooms</div>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg text-center">
+                      <div className="text-2xl font-bold text-green-600">{generatedTimetable.stats?.totalSlots || 0}</div>
+                      <div className="text-sm text-gray-600">Total Time Slots</div>
+                    </div>
+                    <div className="bg-purple-50 p-4 rounded-lg text-center">
+                      <div className="text-2xl font-bold text-purple-600">{generatedTimetable.stats?.coursesScheduled || 0}</div>
+                      <div className="text-sm text-gray-600">Courses</div>
+                    </div>
+                    <div className="bg-orange-50 p-4 rounded-lg text-center">
+                      <div className="text-2xl font-bold text-orange-600">{generatedTimetable.stats?.totalStudents || 0}</div>
+                      <div className="text-sm text-gray-600">Total Students</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+            <TimetableView data={timetable} view="week" />
+          </div>
+        )}
+
+        {/* Conflicts Tab */}
+        {activeTab === 'conflicts' && (
+          <div className="space-y-6">
+            <div className="card">
+              <h3 className="text-lg font-medium mb-6">Scheduling Conflicts</h3>
+              {conflicts.length === 0 ? (
+                <p className="text-gray-500">No conflicts detected</p>
+              ) : (
+                <div className="space-y-4">
+                  {conflicts.map((conflict) => (
+                    <div key={conflict.id} className="border rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="font-medium text-red-600">{conflict.type}</h4>
+                        <span className="text-sm text-gray-500">{conflict.severity}</span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3">{conflict.description}</p>
+                      <button
+                        onClick={() => handleResolveConflict(conflict.id, { action: 'auto-resolve' })}
+                        className="btn-primary text-sm"
+                      >
+                        Auto Resolve
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </main>
+  )
+}
+
+export default AdminDashboard
+      </div>
+    </main>
+  )
+}
+
+export default AdminDashboard
